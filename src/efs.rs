@@ -1,13 +1,12 @@
-use core::f32::consts::E;
 
 use alloc::sync::Arc;
 use spin::Mutex;
 
 use crate::{
     bitmap::Bitmap,
-    block_cache::get_block_cache,
+    block_cache::{block_cache_sync_all, get_block_cache},
     block_dev::BlockDevice,
-    layout::{DiskInode, SuperBlock},
+    layout::{DiskInode, DiskInodeType, SuperBlock},
     vfs::Inode,
     BLOCK_SZ,
 };
@@ -69,6 +68,16 @@ impl EasyFileSystem {
                 );
             },
         );
+        // 创建根目录
+        assert_eq!(efs.alloc_inode(),0);
+        let (root_inode_block_id,root_inode_offset) = efs.get_disk_inode_pos(0);
+        get_block_cache(root_inode_block_id as usize, Arc::clone(&block_device))
+            .lock()
+            .modify(root_inode_offset, |disk_inode: &mut DiskInode|{
+                disk_inode.initialize(DiskInodeType::Directory);
+            });
+        block_cache_sync_all();
+        Arc::new(Mutex::new(efs))
     }
 
     pub fn open(block_device: Arc<dyn BlockDevice>) -> Arc<Mutex<Self>> {
@@ -121,7 +130,7 @@ impl EasyFileSystem {
     参数都表示数据块在块设备上的编号，而不是在数据块位图中分配的 bit 编号
         */
     pub fn alloc_data(&mut self) -> u32 {
-        self.data_bitmap.alloc(&self.block_device) as u32 + self.data_area_start_block
+        self.data_bitmap.alloc(&self.block_device).unwrap() as u32 + self.data_area_start_block
     }
 
     pub fn dealloc_data(&mut self, block_id: u32) {

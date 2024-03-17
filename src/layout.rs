@@ -38,7 +38,7 @@ impl SuperBlock {
         inode_area_blocks: u32,
         data_bitmap_blocks: u32,
         data_area_blocks: u32,
-    ) -> Self {
+    ) {
         *self = Self {
             magic: EFS_MAGIC,
             total_blocks,
@@ -60,7 +60,7 @@ type IndirectBlock = [u32; BLOCK_SZ / 4];
 
 #[repr(C)]
 pub struct DiskInode {
-    pub size: usize,                       // 文件或者目录的字节数
+    pub size: u32,                       // 文件或者目录的字节数
     pub direct: [u32; INODE_DIRECT_COUNT], // 28 * 0.5KiB = 14KiB
     pub indirect1: u32,                    // 128 * 0.5KiB = 64KiB
     pub indirect2: u32,                    // 128 * 64KiB = 8MiB
@@ -344,7 +344,7 @@ impl DiskInode {
     pub fn write_at(
         &self,
         offset: usize,
-        buf: &mut [u8],
+        buf: &[u8],
         block_device: &Arc<dyn BlockDevice>,
     ) -> usize {
         let mut start = offset;
@@ -383,7 +383,7 @@ impl DiskInode {
 const NAME_LENGTH_LIMIT: usize = 27;
 #[repr(C)]
 pub struct DirEntry {
-    name: [u8; NAME_LENGTH_LIMIT],
+    name: [u8; NAME_LENGTH_LIMIT+1],
     inode_number: u32,
 }
 pub const DIRENT_SZ: usize = 32;
@@ -396,7 +396,7 @@ impl DirEntry {
     }
     pub fn new(name: &str, inode_number: u32) -> Self {
         let mut bytes = [0u8; NAME_LENGTH_LIMIT + 1];
-        &mut bytes[..name.len()].copy_from_slice(name.as_bytes());
+        bytes[..name.len()].copy_from_slice(name.as_bytes());
         Self {
             name: bytes,
             inode_number,
@@ -405,7 +405,7 @@ impl DirEntry {
     pub fn as_bytes(&self) -> &[u8] {
         unsafe { core::slice::from_raw_parts(self as *const _ as usize as *const u8, DIRENT_SZ) }
     }
-    pub fn as_bytes_mut(&self) -> &mut [u8] {
+    pub fn as_bytes_mut(&mut self) -> &mut [u8] {
         unsafe { core::slice::from_raw_parts_mut(self as *const _ as usize as *mut u8, DIRENT_SZ) }
     }
     pub fn name(&self) -> &str {

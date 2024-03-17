@@ -47,7 +47,7 @@ impl BlockCache {
     // get_ref 是一个泛型方法，它可以获取缓冲区中的位于
     // 偏移量 offset 的一个类型为 T 的磁盘上数
     // 据结构的可变引用
-    pub fn get_mut<T>(&self, offset: usize) -> &mut T
+    pub fn get_mut<T>(&mut self, offset: usize) -> &mut T
     where
         T: Sized,
     {
@@ -55,7 +55,7 @@ impl BlockCache {
         assert!(offset + type_size <= BLOCK_SZ);
         self.modified = true;
         let addr = self.addr_of_offset(offset);
-        unsafe { &mut *(addr as *const T) }
+        unsafe { &mut *(addr as *mut T) }
     }
 }
 
@@ -78,7 +78,7 @@ impl BlockCache {
     pub fn read<T, V>(&self, offset: usize, f: impl FnOnce(&T) -> V) -> V {
         f(self.get_ref(offset))
     }
-    pub fn modify<T, V>(&mut self, offset: usize, f: impl FnOnce(&T) -> V) -> V {
+    pub fn modify<T, V>(&mut self, offset: usize, f: impl FnOnce(&mut T) -> V) -> V {
         f(self.get_mut(offset))
     }
 }
@@ -131,13 +131,11 @@ impl BlockCacheManager {
                     panic!("Run Out of BlockCache!");
                 }
             }
+            let block_cache = Arc::new(Mutex::new(BlockCache::new(
+                block_id, Arc::clone(&block_device))));
+            self.queue.push_back((block_id,Arc::clone(&block_cache)));
+            block_cache
         }
-        let block_cache = Arc::new(Mutex::new(BlockCache::new(
-            block_id,
-            Arc::clone(&block_device),
-        )));
-        self.queue.push_back((block_id, Arc::clone(&block_cache)));
-        block_cache
     }
 }
 
@@ -154,4 +152,12 @@ pub fn get_block_cache(
     BLOCK_CACHE_MANAGER
         .lock()
         .get_block_cache(block_id, block_device)
+}
+
+/// Sync all block cache to block device
+pub fn block_cache_sync_all() {
+    let manager = BLOCK_CACHE_MANAGER.lock();
+    for (_, cache) in manager.queue.iter() {
+        cache.lock().sync();
+    }
 }
