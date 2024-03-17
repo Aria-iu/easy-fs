@@ -44,6 +44,7 @@ impl Bitmap {
                 {
                     // modify cache
                     bitmap_block[bits64_pos] |= 1u64 << inner_pos;
+                    // 位图中分配出的bit的编号
                     Some(block_id * BLOCK_BITS + bits64_pos * 64 + inner_pos as usize)
                 } else {
                     None
